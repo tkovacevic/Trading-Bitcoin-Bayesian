@@ -1,0 +1,1048 @@
+\documentclass[9pt]{article} 
+% \usepackage{simpleConference}
+\usepackage[slovene]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{subcaption}
+\usepackage[title]{appendix}
+\usepackage{ctable} % for \specialrule command
+% \usepackage{tablefootnote}
+\usepackage{threeparttable}
+% \usepackage{appendix}
+\usepackage{array}
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}c{#1}}
+
+% additional packages
+\usepackage{mathtools}
+\usepackage{amsmath}
+\usepackage{bbm}
+\usepackage{support-caption}
+\usepackage{subcaption}
+\usepackage{url}
+\usepackage{linguex}
+\usepackage{float}
+\usepackage{titling}
+\usepackage{geometry} 
+\usepackage[unicode]{hyperref}
+\DeclarePairedDelimiter\abs{\lvert}{\rvert}
+\DeclarePairedDelimiter\norm{\lVert}{\rVert}
+\geometry{left=2cm,right=2cm,top=2cm,bottom=2cm}
+\setlength{\droptitle}{-6em}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=blue,      
+    urlcolor=blue,
+    citecolor=blue,
+}
+ 
+\urlstyle{same}
+% \setlength{\parskip}{0cm}
+
+% % macros
+% \newtheorem{theorem}{Trditev}[section]
+% \newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+% \providecommand{\keywords}[1]{\textbf{\textit{Ključne besede:}} #1}
+
+\begin{document}
+
+% \setkeys{Gin}{width=.6\textwidth,height=.4\textwidth}
+\SweaveOpts{concordance=TRUE,echo=FALSE,include=TRUE}
+% \setkeys{Gin}{width=.95\textwidth,height=.95\textwidth}
+\title{Algoritmično trgovanje s kriptovaluto Bitcoin}
+
+\author{Tjaša Kovačević \\
+Mentor: izr. prof. dr. Erik Štrumbelj\\
+}
+\maketitle
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+Poiščemo in predstavimo podatke o trgovanju s kriptovaluto Bitcoin ter ocenimo njeno ceno skozi celoten čas obstoja. Iz podatkov o trgovanju s kriptovaluto Bitcoin želimo napovedati prihodnje cene zato, da izvedemo dobičkonosne odločitve. Naredimo analizo časovne vrste. Grafično ocenimo, da je sprememba cene kriptovalute Bitcoin verjetno stacionarna časovna vrsta in da se meša. Predlagamo optimalni klasični model ARMA in logistično regresijo, ki ju naredimo z Bayesovim pristopom s šibko informativnimi apriornimi vrednostmi.
+Nato razvijemo trgovalno strategijo in simuliramo trgovanje. Uporabimo še klasifikacijski algoritem slučajni gozd. Opravičimo tudi, da je smiselno uporabljati klasifikacijske algoritme, ko je časovna vrsta stacionarna.
+\end{abstract}
+
+% \keywords{Algoritmično trgovanje, Napovedovanje časovnih vrst, Bitcoin}
+<<>>=
+rm(list = ls()) 
+setwd("~/Dropbox/Tjasulka/MAGISTERIJ/Bayes_2018/Trading_Bitcoin")
+source("~/Dropbox/Tjasulka/MAGISTERIJ/Bayes_2018/Trading_Bitcoin/functions.R")
+source("~/Dropbox/Tjasulka/MAGISTERIJ/Bayes_2018/Trading_Bitcoin/TrainTime.R")
+source("~/Dropbox/Tjasulka/MAGISTERIJ/Bayes_2018/Trading_Bitcoin/TestTime.R")
+source("~/Dropbox/Tjasulka/MAGISTERIJ/Bayes_2018/Trading_Bitcoin/source_trading.R")
+@
+
+<<>>=
+#select parameters for test set!! (help on line 136)
+
+##################################################################
+# Best models on 120 training days with a0=1598:
+# LR_bayes: gamma=0.4, dd=110, d=50
+# ARMA_bayes: MA1, gamma=0.5/... /0.95, d=100
+
+# RF: gamma=0.25, dd=110, d=50
+# LR_frekv: gamma=0.4, dd=110, d=50; todo Ridge reg.!
+# ARMA_frekv: MA1, gamma=0.5, d=80
+##################################################################
+### we had highest profit with these parameters on train set
+d1.LR_bayes <- 50
+dd1.LR_bayes <- 110
+
+d1.ARMA_bayes <- 100
+pq1.ARMA_bayes <- "MA_1"
+pq1.ARMA_bayes.w <- "MA(1)"
+
+d1.RF_frekv <- 50
+dd1.RF_frekv <- 110
+###
+d1.LR_frekv <- 50
+dd1.LR_frekv <- 110
+
+d1.ARMA_frekv <- 80
+pq1.ARMA_frekv <- "MA_1"
+### parameters gamma to compare for test set
+gamma1.LR_bayes <- c(.3,.4,.5)
+gamma1.ARMA_bayes <- c(.55,.7,.85)
+gamma1.RF_frekv <- c(.1,.2,.3)
+###
+gamma1.LR_frekv <- c(.3,.4,.5)
+gamma1.ARMA_frekv <- c(.5,.65,.8)
+@
+
+
+<<>>=
+#do grid search on train set
+time.0.needed <- Sys.time()
+for(i in 1:length(models.x)){ #we have 5 models
+  if(gr.name[i]){
+    model.name <- models.x[i]
+    funk_run_trainTime(model.name)
+  }
+}
+time.1.needed <- Sys.time()-time.0.needed
+
+#import data
+#train set
+# train.set.list <- list()
+# for(model in c("ARMA_bayes","LR_bayes",
+#                "ARMA_frekv","LR_frekv","RF_frekv")){
+#   if(model %in% c("ARMA_bayes","ARMA_frekv")){
+#     inner <- paste("./train_days/output_budgets_Models",model,"_a0",a0,
+#               "_trainTime",train.time0,
+#               "_dRange",paste(d_range1.x,collapse = "_"),
+#               ".rds",sep="")
+#   }else{
+#     inner <- paste("./train_days/output_budgets_Models",model,"_a0",a0,
+#               "_trainTime",train.time0,
+#               "_dRange",paste(d_range1.x,collapse = "_"),
+#               "_ddRange",paste(dd_range1.x,collapse = "_"),
+#               ".rds",sep="")
+#   }
+#   train.set.list[[paste(model,"_train",sep="")]] <- readRDS(inner)
+# }
+
+# tradeCount_function(train.set.list[[]]) choose the model and find the best one
+@
+
+<<>>=
+#run test set
+for(i in 1:length(models.x)){ #we have 5 models
+  if(test.name[i]){
+    model.name <- models.x[i]
+    funk_run_testTime(model.name)
+  }
+}
+
+#import test set
+LR_bayes_test <- readRDS(paste("./test_days/output_budgets_ModelsLR_bayes_a0",a0+train.time0,
+              "_trainTime",pred.time,
+              "_dRange",d1.LR_bayes,
+              "_ddRange",dd1.LR_bayes,
+              ".rds",sep=""))
+
+ARMA_bayes_test <- readRDS(paste("./test_days/output_budgets_ModelsARMA_bayes_a0",a0+train.time0,
+              "_trainTime",pred.time,
+              "_dRange",d1.ARMA_bayes,
+              "_ARMApq",pq1.ARMA_bayes,
+              ".rds",sep=""))
+
+RF_frekv_test <- readRDS(paste("./test_days/output_budgets_ModelsRF_frekv_a0",a0+train.time0,
+              "_trainTime",pred.time,
+              "_dRange",d1.RF_frekv,
+              "_ddRange",dd1.RF_frekv,
+              ".rds",sep=""))
+
+LR_frekv_test <- readRDS(paste("./test_days/output_budgets_ModelsLR_frekv_a0",a0+train.time0,
+              "_trainTime",pred.time,
+              "_dRange",d1.LR_frekv,
+              "_ddRange",dd1.LR_frekv,
+              ".rds",sep=""))
+
+ARMA_frekv_test <- readRDS(paste("./test_days/output_budgets_ModelsARMA_frekv_a0",a0+train.time0,
+              "_trainTime",pred.time,
+              "_dRange",d1.ARMA_frekv,
+              "_ARMApq",pq1.ARMA_frekv,
+              ".rds",sep=""))
+
+setwd("~/Dropbox/Tjasulka/MAGISTERIJ/Bayes_2018/Trading_Bitcoin/sem_last") #grafični prikazi poročila
+
+@
+
+
+<<>>=
+p.d_range1.x <- paste(d_range1.x,collapse = ", ")
+p.dd_range1.x <- paste(dd_range1.x,collapse = ", ")
+p.gamma_range1.x <- paste(gamma_range1.x,collapse = ", ")
+@
+
+\section{Uvod} \label{sec: uvod}
+Časovne vrste se pojavljajo povsod v svetu (npr. vrednosti delnic, višine rek, temperatura zraka, število prebivalcev ...), cena kriptovalute Bitcoin (v nadaljevanju valute Bitcoin) pa je lep primer. Časovna vrsta je zaporedje podatkovnih točk v določenem času.
+Namen te seminarske naloge je simulacija trgovanja z valuto Bitcoin. Osredotočimo se na napovedovanje in trgovanje z modeli \textit{avtoregresije in drseče sredine} (ARMA), \textit{logistično regresijo} (LR) ter \textit{slučajnim gozdom} (RF). Modela ARMA in LR naredimo z Bayesovim pristopom z orodjem Stan,
+% in frekventistično
+model RF pa z uporabo funkcije \texttt{randomForest} iz istoimenskega paketa.
+
+
+Zaradi računske zahtevnosti uporabimo dnevne podatke. Predvidevamo, da višja kot je frekvenca trgovanja, bolj je primeren čisto tehnični in algoritmični pristop.
+
+V poglavju \ref{sec: podatki} predstavimo podatke o trgovanju z valuto Bitcoin, v poglavju \ref{sec: problem} pa predstavimo problem, ki se mu posvetimo. V poglavju \ref{sec: modeliranje} ocenimo ceno valute skozi čas in naredimo grafično analizo časovne vrste. Namen naloge ni analiza časovne vrste, ampak trgovanje z izbranimi modeli. Zato se ne ukvarjamo s podrobnejšo analizo časovne vrste in morebitnimi kršitvami predpostavk. V poglavju \ref{sec: grid.search} predstavimo množice parametrov, po katerih smo iskali najboljši model za vsak izbran pristop. Nato v poglavjih \ref{sec: ARMA}, \ref{sec: LR} in \ref{sec: RF} predstavimo modele ARMA, LR in RF. Na koncu v poglavju \ref{sec: ocenjevanje.rezultati} predstavimo kako smo ocenjevali modele, katere parametre smo izbrali v Stan, prikažemo rezultate in predlagamo možne izboljšave in razširitve. V poročilu smo za numerično notacijo uporabili angleški sistem: znak ``\texttt{.}'' pomeni decimalno mesto, znak ``\texttt{,}'' pa tisočice.
+
+\subsection{Podatki} \label{sec: podatki}
+Kratka zgodovina cene valute Bitcoin:
+\begin{itemize} 
+  \item Bitcoin je izumila neznana oseba ali skupina ljudi z imenom Satoshi Nakamoto in ga izdala kot odprto programsko opremo v letu 2009. 
+  \item Leta 2013 so se cene začele okrog 13 USD in se do konca tega leta zvišale na 770 USD.
+  \item V letu 2014 se je število uporabnikov storitev podjetja Coinbase povečalo na milijon uporabnikov. Coinbase je digitalna menjalnica s sedežem v San Franciscu.
+  \item 17.12.2017 je cena dosegla najvišjo vrednost 19,783 USD.
+  \item Kitajska je z zakoni sprejetimi septembra 2017 uvedla popolno prepoved trgovanja s to valuto na Kitajskem. Prepoved se je začela 1.2.2018. Cene so se nato 5.2.2018 znižale na 6,914 USD. Trgovanje s to valuto v Renminbi se je od septembra 2010 do junija 2018 z več kot 90 odstotkov obsega vsega trgovanja znižalo na manj kot 1 odstotek. 
+  \item V drugi polovici leta 2018 se je cena te valute gibala med 11,480 in 5,848 USD.
+\end{itemize}
+
+Uporabljamo podatke ponudnika CoinDesk~\cite{coindesk}, ki ponuja vmesnik API, s katerim lahko vsako minuto dobimo izračunan Bitcoin Price Index (BPI), ki sledi cenam valute Bitcoin z digitalnih borznih izmenjav Bitfinex, Bitstamp, Coinbase in itBit. BPI je izračunan na podlagi meril objavljenih na strani ponudnika. Uporabljamo zgodovinske podatke od 18.7.2010 do \Sexpr{koncni_dan_xx} s frekvenco 1 dan za ceno BPI v USD. Manjkajočih vrednosti v podatkih ni. 
+
+\subsection{Problem} \label{sec: problem}
+Naj bo $x_{t}$ cena valute Bitcoin v času $t \in \mathbb{Z}^{+}$. Osredotočimo se na dva problema:\\
+\textit{Napovedovanje:} Iz podatkov o ceni do časa $t$ bi radi napovedali ceno v času $s \geq t + 1$.\\
+\textit{Trgovanje:} Za vsak čas $t$ bi se radi na podlagi napovedi odločili za nakup valute Bitcoin ali prodajo valute Bitcoin tako, da bodo naše odločitve čim bolj dobičkonosne. Da poenostavimo trgovanje, v vsakem času $t$ izberemo med tremi možnostmi trgovanja z valuto Bitcoin: 
+\begin{itemize}
+\item{Kupimo za ves denar, s katerim trgujemo.}
+\item{Prodamo vse.}
+\item{Čakamo (ne trgujemo).}
+\end{itemize}
+
+Na začetku trgovanja imamo poljubno končno količino denarja, s katerim lahko trgujemo.
+% (v našem primeru \Sexpr{format(budget_start0,big.mark = ",")} USD).
+
+Za vsak čas $t$ naj bo $h_t=1$, če imamo valuto Bitcoin in $h_t=0$, sicer. Odločitev o nakupu oziroma prodaji $d_t$ v času $t$ je torej:
+
+\textit{
+$$ d_t = \begin{cases} \mbox{kupi, če } h_t=0 \mbox{ in napovedana je rast cene, z veliko verjetnostjo}\\ \mbox{prodaj, če } h_t=1 \mbox{ in napovedan je padec cene, z veliko verjetnostjo}\\ \mbox{čakaj, sicer.} \end{cases}$$
+}
+
+\section{Modeliranje časovnih vrst} \label{sec: modeliranje}
+
+Za vsak dan imamo podatek o najvišji vrednosti BPI $\texttt{High(t)}$ in najnižji vrednosti BPI $\texttt{Low(t)}$. 
+Ceno valute Bitcoin $x_{t}$ v času $t$ ocenimo na naslednji način:
+$$x_{t} = \frac{\texttt{High(t)} + \texttt{Low(t)}}{2}.$$
+
+Slika \ref{fig: price} prikazuje ceno valute Bitcoin od 18.7.2010 do \Sexpr{koncni_dan_xx}. Za trgovanje se odločimo po \Sexpr{t0t0}. Glavni razlog za to je, da pred \Sexpr{t0t0} trg še ni bil dovolj razvit.
+% Ker bomo modele v nadaljevanju učili na preteklih podatkih, se odločimo za analizo časovne vrse od \Sexpr{t1t1} dalje.
+% \subsection{Preprocesiranje podatkov}
+
+Podatke od \Sexpr{t1t1} do \Sexpr{train_end_time} (skupaj \Sexpr{train.time0} dni) uporabimo za grafično analizo časovne vrste (trend, perioda, stacionarnost, avtokorelacijska funkcija ACF, parcialna avtokorelacijska funkcija PACF) in za oceno treh oziroma štirih parametrov za vsak model. Prvi parameter je $\delta$, ki predstavlja velikost okna - koliko preteklih dni upoštevamo. Drugi parameter je $\gamma$, ki predstavlja zaupanje v model - kako previdni smo pri sklepanju odločitev na podlagi napovedi modela. Pri LR in RF uporabimo dodatno še parameter $D$ - na koliko preteklih podatkih vsakokrat učimo model. Za vsak dan, za katerega napovedujemo, model učimo na zadnjih $D$ dneh in ga uporabimo za napoved. Pri modelu ARMA imamo dodatno še parametra $p$ - za AR del in $q$ - za MA del.
+
+Za frekvenco trgovanja izberemo 1 dan. Premikamo se po en dan in vsakič na $\delta$ preteklih dneh posodobimo model. Nato napovemo spremembo v ceni in se na podlagi napovedi in tudi zaupanja v napoved, ki jo primerjamo z izbrano $\gamma$, odločimo, ali izvedemo trgovanje. Pri simulaciji trgovanja upoštevamo transakcijske stroške, ki znašajo 2$\%$ transakcije. 
+
+
+<<>>=
+set.seed(123)
+@
+
+\begin{figure}[H]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+<<echo=FALSE,include=FALSE,message=FALSE>>=
+p1 <- ggplot(data=data.frame(price=price_all, date=as.Date(all_days$Date, '%Y-%m-%d')),
+             aes(date, price)) +
+  geom_line(col="blue") +
+  labs(x = "Čas (mesec - leto)", y = "Cena BPI (USD)") +
+  scale_x_date(labels = date_format("%m-%Y")) +
+  theme_minimal() +
+  scale_y_continuous(labels=function(x) format(x, big.mark = ",", scientific = FALSE))
+
+cairo_pdf("./prices.pdf",width=7,height=3)
+p1
+gar <- dev.off()
+@
+
+\includegraphics[width=0.55\textwidth]{prices.pdf}
+\caption{Dnevna cena valute Bitcoin od 18.7.2010 do \Sexpr{koncni_dan_xx}.} % 2010-07-01_2018-11-05
+\label{fig: price}
+\end{figure}
+
+\subsection{Stacionarnost in mešanje} \label{sec: stac.mes}
+
+Časovna vrsta $f$ je \textit{krepko stacionarna (stacionarna)}, če velja:
+% \begin{equation}
+$$\mathrm{P}(f_{t} \mid \lbrace f_{t-d}, ..., f_{t-1} \rbrace) = 
+\mathrm{P}(f_{s} \mid \lbrace f_{s-d}, ..., f_{s-1} \rbrace), $$
+% \end{equation}
+za vsak $s$. 
+
+Časovna vrsta se \textit{meša}, če je njena porazdelitev v določenem času odvisna predvsem od nedavne preteklosti.
+
+Uporabimo preprosto diferenciranje časovne vrste $x$ in dobimo časovno vrsto $y$: 
+$$y_{t} = x_{t+1} - x_{t}.$$
+
+
+<<include=FALSE,warning=FALSE,comment=FALSE>>=
+x <- price_all[(a0+1):(a0+train.time0)]
+y <- diff(x, lag = 1)
+
+if(run_linear_regression_y_bayes){
+  X <- cbind(1,matrix(c(1:length(y)),ncol=1))
+  model.stan <- model.stan.list[["linear_regression"]]
+  stan_data <- list(n=length(y),
+                  k=ncol(X),
+                  X=X,
+                  y=y)
+   y_fit <- sampling(model.stan,
+                     data = stan_data,
+                     iter = 2000, warmup = 1000,
+                     chains = 1,
+                     seed = 123,
+                     verbose = FALSE,
+                     refresh = -1)
+  y_fit <- summary(y_fit)$summary
+  saveRDS(y_fit,"y_linear_regression_fit.rds")
+  intercept_y <- y_fit["beta[1]","mean"]
+  nak_y <- y_fit["beta[2]","mean"]
+  y_lm <- intercept_y + nak_y*(1:length(y))
+  saveRDS(y_lm,"y_linearn_regression_for_plot.rds")
+  ###############################
+  X <- cbind(1,matrix(c(1:length(x)),ncol=1))
+  stan_data <- list(n=length(x),
+                  k=ncol(X),
+                  X=X,
+                  y=x)
+  x_fit <- sampling(model.stan,
+                    data = stan_data,
+                    iter = 2000, warmup = 1000,
+                    chains = 1,
+                    seed = 123,
+                    verbose = FALSE,
+                    refresh = -1)
+  x_fit <- summary(x_fit)$summary
+  saveRDS(x_fit,"x_linear_regression_fit.rds")
+  intercept_x <- x_fit["beta[1]","mean"]
+  nak_x <- x_fit["beta[2]","mean"]
+  x_lm <- intercept_x + nak_x*(1:length(x))
+  saveRDS(x_lm,"x_linearn_regression_for_plot.rds")
+}else{
+  y_lm <- readRDS("y_linearn_regression_for_plot.rds")
+  x_lm <- readRDS("x_linearn_regression_for_plot.rds")
+  y_fit <- readRDS("y_linear_regression_fit.rds")
+  x_fit <- readRDS("x_linear_regression_fit.rds")
+}
+rownames(x_fit) <- rownames(y_fit) <- c("beta1","beta2","sigma","lp")
+x_fit <- round(x_fit,2)
+y_fit <- round(y_fit,2)
+
+iz_y_beta1 <- paste("[",y_fit["beta1","2.5%"],", ",y_fit["beta1","97.5%"],"]",sep="")
+iz_y_beta2 <- paste("[",y_fit["beta2","2.5%"],", ",y_fit["beta2","97.5%"],"]",sep="")
+iz_y_sigma <- paste("[",y_fit["sigma","2.5%"],", ",y_fit["sigma","97.5%"],"]",sep="")
+
+iz_x_beta1 <- paste("[",x_fit["beta1","2.5%"],", ",x_fit["beta1","97.5%"],"]",sep="")
+iz_x_beta2 <- paste("[",x_fit["beta2","2.5%"],", ",x_fit["beta2","97.5%"],"]",sep="")
+iz_x_sigma <- paste("[",x_fit["sigma","2.5%"],", ",x_fit["sigma","97.5%"],"]",sep="")
+@
+
+
+Prikaz obeh časovnih vrst z dodanima regresijskima premicama za \Sexpr{train.time0} dni od \Sexpr{t1t1} do \Sexpr{train_end_time} je na sliki \ref{fig: train_days}. Grafično ocenimo, da je časovna vrsta $x$ nestacionarna in z negativnim trendom ($95\%$ kredibilni interval za naklon je \Sexpr{iz_x_beta2}), časovna vrsta $y$ pa stacionarna in brez očitnega trenda ($95\%$ kredibilni interval za naklon je \Sexpr{iz_y_beta2}).
+Ker časovna vrsta $y$ nima očitnega trenda, lahko s slike \ref{fig: train_days} ocenimo, da tudi ni očitne periodičnosti na \Sexpr{train.time0} učnih dneh.
+Ocenimo, da se časovna vrsta $y$ \textit{meša} - vrednosti pri zelo oddaljenih časih so asimptotsko neodvisne. To razberemo s slike \ref{fig: acf_pacf} za $y$, kjer ACF in PACF eksponentno padata.
+
+\begin{figure}[H]
+\centering
+<<echo=FALSE,include=FALSE,message=FALSE>>=
+# par(mfrow = c(1,2))
+t <- seq(1, length(x))
+# ts.plot(x, col="blue",xlab="t")
+p1 <- ggplot(data=data.frame(x=x, time=t),
+             aes(time, x)) +
+  geom_line(col="blue") +
+  labs(x = "Čas (v dneh)", y = "x") +
+  theme_minimal() +
+  scale_x_continuous(breaks=seq(0,length(t),by=20))+
+  geom_line(aes(x=c(1:length(x)),y=x_lm), col="red")
+
+t <- seq(1, length(y))
+# ts.plot(y, col="blue",xlab="t")
+# lines(x=c(1:length(y)),y=y_lm,col="red")
+p2 <- ggplot(data=data.frame(y=y, time=t),
+             aes(time, y)) +
+  geom_line(col="blue") +
+  labs(x = "Čas (v dneh)", y = "y") +
+  theme_minimal() + 
+  scale_x_continuous(breaks=seq(0,length(t)+1,by=20)) +
+  geom_line(aes(x=c(1:length(y)),y=y_lm), col="red")
+
+cairo_pdf("./xy_time_series.pdf",width=8,height=2)
+grid.arrange(p1, p2,ncol=2)
+gar <- dev.off()
+@
+\includegraphics[width=0.8\textwidth]{xy_time_series.pdf}
+\caption{Prikaz časovne vrste $x$ in časovne vrste $y$, za \Sexpr{train.time0} dni s časom $t_0$ = \Sexpr{t1t1}. Dodani sta regresijski premici, dobljeni z Bayesovo linearno regresijo z neinformativnim (uniformnim) apriornim mnenjem za $\beta$ in $\sigma$. (Model: $y_i|\beta, \sigma \sim_\text{iid} N(\beta^\intercal x_i, \sigma^2)$.)}
+\label{fig: train_days}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+<<fig=T,echo=FALSE,height=5,width=9>>=
+par(mfrow = c(2,2))
+acf(x)
+acf(y)
+pacf(x)
+pacf(y)
+@
+\caption{ACF in PACF za časovno vrsto $x$ levo in za časovno vrsto $y$ desno, za \Sexpr{train.time0} dni s časom $t_0$ = \Sexpr{t1t1}.}
+\label{fig: acf_pacf}
+\end{figure}
+
+Ker smo ocenili, da je časovna vrsta $y$ stacionarna in se meša, jo raje kot časovno vrsto $x$ uporabimo za napovedovanje in trgovanje. 
+
+
+\subsection{Množice možnih vrednosti parametrov} \label{sec: grid.search}
+
+Parametre $\delta$, $D$, $p,q$ in $\gamma$ iščemo znotraj vnaprej izbranih množic: 
+\begin{itemize}
+\item{parameter $\delta$ v množici $\left\{\Sexpr{p.d_range1.x}\right\}$,}
+\item{parameter $D$ v množici $\left\{\Sexpr{p.dd_range1.x}\right\}$,}
+\item{parametra $p, q$ v množici $\left\{0, 1, 2\right\}$, kjer $p+q \in \left\{1,2,3\right\}$,}
+\item{parameter $\gamma$ v množici od 0.05 do 0.95 s korakom 0.05.}
+\end{itemize}
+Za vsako kombinacijo izbranih parametrov za vsak model (ARMA, LR, RF) trgujemo na učni množici \Sexpr{train.time0} dni od \Sexpr{t1t1} do \Sexpr{train_end_time} ter poiščemo kombinacijo, s katero je končni dobiček največji. Modele na testni množici primerjamo za različne vrednosti parametra $\gamma$. 
+
+\subsection{Model ARMA} \label{sec: ARMA}
+
+ARMA je parametrični model, ki izkorišča stacionarnost in mešanje, kjer velja $p,q \in \mathbb{N}_0$ in $p+q>0$.
+
+AR($p$) je \textit{avtoregresijski model} reda $p,\ p\geq 1$. Zapišemo ga kot
+$$y_t = \alpha + \sum_{i=1}^{p} \phi_i y_{t-i} + \epsilon_t,$$
+kjer so $\phi_1,\cdots, \phi_p$ parametri modela, $\alpha$ je konstanta, slučajna spremenljivka $\epsilon_t$ pa je napaka oziroma \textit{beli šum}.
+
+MA($q$) je \textit{model drseče sredine} reda $q,\ q\geq 1$. Zapišemo ga kot
+$$y_t = \mu + \sum_{i=1}^{q} \theta_i \epsilon_{t-i} + \epsilon_t,$$
+kjer so $\theta_1,\cdots, \theta_q$ parametri modela, $\mu$ je pričakovana vrednost za $y_t$, $\epsilon_t, \cdots, \epsilon_{t-q}$ pa so ponovno napake.
+  
+Model ARMA($p,q$), $p \geq 1, q \geq 1$ zapišemo kot
+$$y_t = \alpha + \sum_{i=1}^{p} \phi_i y_{t-i} + \sum_{i=1}^{q} \theta_i \epsilon_{t-i} + \epsilon_t.$$
+
+Na sliki \ref{fig: acf_pacf} za $y$ ACF implicira $q\leq 2$, PACF pa $p\leq 2$. Omejimo se na modele, za katere velja $p, q \in \left\{0,1,2\right\}$ in $p+q \in \left\{1,2,3\right\}$, ker bi bili sicer modeli preveč kompleksni.
+% (Primerjamo modele AR(1), AR(2), MA(1), MA(2), ARMA(1,1), ARMA(1,2) in ARMA(2,1).)
+Prostor vrednosti prametrov $\theta_1, \theta_2$ omejimo na interval $[-1,1]$, ker je to pogoj za določljivost (\textit{identifiability}) modela~\cite{dolocljivost}. Prostor vrednosti parametrov $\phi_1, \phi_2$ prav tako omejimo na interval $[-1,1]$, ker menimo, da je proces stacionaren.
+
+Trgovalno strategijo lahko opišemo kot funkcijo:\\
+\textit{Če velja:}
+
+$$\abs*{\frac{\hat{y}_{t}}{\mathrm{SE}(\hat{y}_{t})}} > \gamma,$$
+
+\indent{\textit{potem:}}
+
+\[ \textit{v času } t  \left\{
+\begin{array}{ll}
+\textit{kupi}, & \textit{če nimamo valute Bitcoin in hkrati velja} \quad \hat{y}_{t} \geq 0 \\
+\textit{prodaj}, & \textit{če imamo valuto Bitcoin in hkrati velja} \quad \hat{y}_{t} < 0 \\
+\textit{čakaj}, & \textit{sicer.}
+\end{array}
+\right. \]
+
+Modeliramo časovno vrsto $y$:
+\begin{itemize}
+\item{Za AR(1) in AR(2): $$y_t \sim N(\alpha + \sum_{i=1}^{p} \phi_i y_{t-i},\sigma).$$}
+\item{Za MA(1) in MA(2): $$y_t \sim N(\mu + \sum_{i=1}^{q} \theta_i \epsilon_{t-i},\sigma).$$}
+\item{Za ARMA(1,1), ARMA(1,2) in ARMA(2,1):
+% $$\epsilon_t \sim N(0,\sigma)$$
+$$y_t \sim N(\alpha + \sum_{i=1}^{p} \phi_i y_{t-i} + \sum_{i=1}^{q} \theta_i \epsilon_{t-i},\sigma).$$
+}
+\end{itemize}
+
+
+% $$\epsilon_t \sim N(0,\sigma)$$
+
+Izbrali smo naslednje apriorne porazdelitve parametrov:
+\begin{itemize}
+\item{$\alpha \sim N(0,10),\ \mu \sim N(0,10)$ (Ker ne želimo vnesti preveč informacije, hkrati pa predvidevamo, da je malo verjetno, da sta zelo daleč od 0.)}
+\item{$\phi_1 \sim U(-1,1),\ \phi_2 \sim U(-1,1)$ (Ker menimo, da je vrsta stacionarna, se omejimo na interval $[-1,1]$.)}
+\item{$\theta_1 \sim U(-1,1),\ \theta_2 \sim U(-1,1)$ (Ker želimo \textit{določljivost}, se omejimo na interval $[-1,1]$.)}
+\item{$\sigma \sim N(0,10)[0,\infty]$ (Šibko informativna, zajame le nenegativne vrednosti.)}
+\end{itemize}
+
+\subsection{Logistična regresija (LR)} \label{sec: LR}
+
+Naj bo
+\[ z_{t}=  \left\{
+\begin{array}{ll}
+\textit{-1}, & \textit{če } \quad y_{t} < 0 \\
+\textit{1}, & \textit{če } \quad y_{t} > 0\\
+\textit{0}, & \textit{sicer.}
+\end{array}
+\right. \]
+
+Naredimo tri značilke:
+\begin{enumerate}
+\item{$w_1$: Zadnja sprememba v ceni (rast/padec): $z_{t - 1}.$}
+\item{$w_2$: Delež sprememb cene manjših od 0 v našem oknu: 
+% \begin{equation}
+$$\frac{1}{\delta} \sum_{\tilde{t} = t - \delta}^{t-1} \mathbbm{1}_{ (y_{\tilde{t}} < 0) }.$$}
+% \end{equation}}
+% (delež cen večjih od 0 je $1 - $ delež manjših)
+\item{$w_3$: Trend, koliko zadnjih sprememb cene iz okna $\delta$ kaže v isto smer.}
+\end{enumerate}
+
+Če je $y$ \textit{stacionarna} in se \textit{meša}, jo je smiselno aproksimirati kot Markovsko verigo, kjer med stanji prehajamo z neko verjetnostjo. Zato, da lahko uporabimo klasifikacijske algoritme, moramo predpostaviti, da je prehodna verjetnost merljiva in zvezna funkcija. Klasifikacijski algoritmi imajo to prednost, da lahko uporabijo večji nabor podatkov, ki smo jih v našem primeru povzeli s tremi značilkami in kot rezultat vračajo ocenjene prehodne verjetnosti, česar pri klasičnih modelih ARMA nimamo~\cite{Amjad}.
+
+
+Model zapišemo kot: 
+$$ y|\alpha,\beta_1,\beta_2,\beta_3 \sim \textnormal{Bernoulli}(\textnormal{logit}^{-1}(\alpha + \beta_1 w_1 + \beta_2 w_2 + \beta_3 w_3)),$$
+kjer je $$\textnormal{logit}^{-1}(u) = \frac{1}{1+e^{-u}}$$
+
+Za apriorne porazdelitve parametrov smo izbrali:
+\begin{itemize}
+\item{$\alpha$ neinformativno (Uniformno, privzeto v Stan.)}
+\item{$\beta_1, \beta_2, \beta_3 \sim N(0,10)$~\cite{Ghosh} (Šibko informativne apriorne porazdelitve.)}
+\end{itemize}
+
+
+Model uporabimo tako, da vrača napovedno \textit{zaupanje} $p_{t}$ za razred 1 (\textit{zaupanje}, da cena naraste).
+Trgovalno strategijo s tem modelom lahko opišemo kot funkcijo: 
+
+\[ \textit{v času } t  \left\{
+\begin{array}{ll}
+\textit{kupi}, & \textit{če nimamo valute Bitcoin, napovedana je rast cene in hkrati velja} \quad p_{t} \geq 1 - \gamma \\
+\textit{prodaj}, & \textit{če imamo valuto Bitcoin, napovedan je padec cene in hkrati velja} \quad p_{t} \leq \gamma \\
+\textit{čakaj}, & \textit{sicer.}
+\end{array}
+\right. \]
+
+\subsection{Klasifikacijski algoritem slučajni gozd (RF)} \label{sec: RF}
+
+Uporabimo tri značilke, napovedno \textit{zaupanje} za razred 1 in trgovalno strategijo, ki smo jih definirali v poglavju  \ref{sec: LR}. Uporabimo funkcijo \texttt{randomForest} iz istoimenskega paketa in parameter število dreves (\texttt{ntree}) \Sexpr{format(n.trees.rf,big.mark = ",")}. Pomembnost značilk za en dan je prikazana na sliki \ref{fig: rf_var_imp}. Najpomembnejša je DistZ ($w_2$).
+
+\begin{figure}[H]
+\centering 
+\includegraphics[width=0.4\columnwidth]{var_imp_plot.pdf}
+\caption{Pomembnost značilk za en dan učne množice \Sexpr{train.time0} dni za RF z uporabo mere Gini za $\delta = 50, D=110$.}
+\label{fig: rf_var_imp}
+\end{figure}
+
+\section{Ocenjevanje modelov in rezultati} \label{sec: ocenjevanje.rezultati}
+
+% \subsection{Ocenjevanje modelov} \label{sec: ocenjevanje}
+% Modele primerjamo glede na končni dobiček. 
+% Najbolj naravna metrika za primerjavo modelov, ki jih uporabljamo pri simulaciji trgovanja z valuto Bitcoin, se nam zdi dobiček na koncu.
+
+\subsection{Stan} \label{sec: stan}
+Vse modele, ki smo jih naredili z Bayesovim pristopom, smo naredili z orodjem Stan. Povsod smo uporabili 1 verigo, 2,000 iteracij, od tega jih prvih 1,000 zavržemo (\texttt{warmup}) in parameter \texttt{adapt\_delta} 0.8. 
+Pri modelih ARMA smo uporabili parameter \texttt{max\_treedepth} 30, pri LR pa privzeto vrednost (10). Seme (\texttt{seed}) smo nastavili na 123.
+Pri modelih ARMA smo imeli težave z divergenco predvsem pri ARMA(1,2) in MA(2), redkeje pa pri ARMA(1,1) in ARMA(2,1). Grafični prikazi aposteriornih porazdelitev parametrov ter težav z divergenco za model ARMA(1,2) so v dodatku \ref{sec: appendixB}. V ta namen smo uporabili 7,000 iteracij, od tega jih prvih 4,000 zavržemo in 4 verige, ter parameter \texttt{adapt\_delta} 0.8 in 0.99. Z večanjem parametra \texttt{adapt\_delta} je bil delež divergentnih iteracij manjši.
+
+Razlogi za to, da je nekaj divergentnih iteracij ostalo so lahko:
+\begin{itemize}
+\item{Premajhen parameter $\delta$. 
+\textit{Za $\delta = 100$ je manjši delež divergentnih iteracij kot za $\delta = 30$.}}
+\item{Vrsta v resnici ni stacionarna.}
+% \item{Premajhno število iteracij.}
+\item{Apriorne porazdelitve parametrov so slabo izbrane.}
+\end{itemize}
+
+Koda modelov je dodana na koncu poročila v dodatku \ref{sec: appendixA}. Vsa ostala koda je dostopna na \url{https://github.com/tkovacevic/Trading-Bitcoin-Bayesian}. 
+
+\subsection{Ocenjevanje in rezultati}
+
+Modele primerjamo glede na končni dobiček. Uporabimo parametre ($\delta, D, p, q, \gamma$) s katerimi je bil naš končni dobiček na učni množici \Sexpr{train.time0} dni najvišji. Naš začetni kapital na učni in na testni množici je \Sexpr{format(budget_start0,big.mark = ",")} USD. Za vsak model uporabimo tri različna zaupanja, kjer je $\gamma$ zaupanje, s katerim smo na učni množici ustvarili najvišji dobiček. 
+Izberemo:
+\begin{itemize}
+\item{$\left\{\gamma^{*1}=\gamma - 0.1, \gamma^{*2}=\gamma, \gamma^{*3}=\gamma + 0.1 \right\}$
+za LR in RF.}
+\item{$\left\{\gamma^{*1}=\gamma - 0.15, \gamma^{*2}=\gamma, \gamma^{*3}=\gamma + 0.15 \right\}$ za ARMA, ker imamo v učni množici za večji nabor parametrov $\gamma$ identično trgovanje.}
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{\label{posterior_ma1}}{\includegraphics[width=0.4\textwidth]{./MA1_plots_delta80_d100/priorvsposterior.pdf}}\hspace{4em}%
+% \vline width 1pt
+\subcaptionbox{\label{posterior_lr}}{\includegraphics[width=0.4\textwidth]{./LR_plots_d50_D110/priorvsposterior.pdf}}
+\caption{Apriorne in aposteriorne porazdelitve parametrov za en dan učne množice \Sexpr{train.time0} dni za predlagana modela ARMA in LR, levo za ARMA z dodano porazdelitvijo napovedi in desno za LR.}
+\label{fig:posterior_ma1_lr}
+\end{figure}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Tako kot pri Bayesovemu pristopu, smo tudi pri frekventističnemu pristopu poiskali ``optimalne'' parametre za modele ARMA in LR in RF.
+Dobički izbranih modelov na naslednjih \Sexpr{format(pred.time,big.mark=",")} dneh, od \Sexpr{zacetni_dan} do \Sexpr{koncni_dan} so prikazani na sliki \ref{fig: one_year.all}, končni dobički, število trgovanj in napovedna točnost pa v tabeli \ref{tab: izidi.test2}.
+
+<<>>=
+ARMA_bayes_profits <- profits_func(ARMA_bayes_test,"ARMA.bayes")
+LR_bayes_profits <- profits_func(LR_bayes_test,"LR.bayes")
+RF_frekv_profits <- profits_func(RF_frekv_test,"RF")
+
+ARMA_frekv_profits <- profits_func(ARMA_frekv_test,"ARMA.frekv")
+LR_frekv_profits <- profits_func(LR_frekv_test,"LR.frekv")
+
+profits_df0 <- merge(merge(ARMA_bayes_profits,LR_bayes_profits,by = "time"),RF_frekv_profits,by="time") %>% 
+  mutate("cena BTC" = price_all[(a0+train.time0+val.time+1):(a0+train.time0+val.time+pred.time)])
+profits_df1 <- gather(profits_df0, key=group, value=cases, -time)
+names(profits_df1) <- c("time","model","values")
+profits_df1$model <- factor(profits_df1$model,
+                            levels=c("ARMA.bayes gamma*1","ARMA.bayes gamma*2","ARMA.bayes gamma*3",
+                                     "LR.bayes gamma*1","LR.bayes gamma*2","LR.bayes gamma*3",
+                                     "RF gamma*1","RF gamma*2","RF gamma*3",
+                                     "cena BTC"))
+
+profits_df.bayes.frekv0 <- merge(merge(profits_df0,ARMA_frekv_profits,by="time"),LR_frekv_profits,by="time")
+profits_df.bayes.frekv1 <- gather(profits_df.bayes.frekv0, key=group, value=cases, -time)
+names(profits_df.bayes.frekv1) <- c("time","model","values")
+profits_df.bayes.frekv1$model <- factor(profits_df.bayes.frekv1$model,
+                            levels=c("ARMA.bayes gamma*1","ARMA.bayes gamma*2","ARMA.bayes gamma*3",
+                                     "LR.bayes gamma*1","LR.bayes gamma*2","LR.bayes gamma*3",
+                                     "RF gamma*1","RF gamma*2","RF gamma*3",
+                                     "ARMA.frekv gamma*1","ARMA.frekv gamma*2","ARMA.frekv gamma*3",
+                                     "LR.frekv gamma*1","LR.frekv gamma*2","LR.frekv gamma*3",
+                                     "cena BTC"))
+
+@
+
+<<>>=
+
+c1 <- (brewer.pal(7, "Greens"))
+c2 <- (brewer.pal(7, "Blues"))
+c3 <- (brewer.pal(7, "Reds"))
+
+profits.plot.all <- ggplot(profits_df1,aes(x=time,y=values,col=model,lty=model)) +
+  geom_line(show.legend = TRUE) +
+  scale_linetype_manual(values=c("dashed","dashed","solid",
+                                 "solid","dashed","dashed",
+                                 "solid","dashed","dashed",
+                                 "dotted"))+
+  scale_color_manual(values=c(c1[c(7,5,3)],
+                              c2[c(7,5,3)],
+                              c3[c(7,5,3)],
+                              "black")) +
+  labs(x = "Čas (mesec, leto)", y = "Cena/Kumulativni dobiček (USD)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90), legend.position=c(.2,.7), legend.title = element_blank()) +
+  scale_x_date(
+    limits = c(profits_df1$time[1],profits_df1$time[nrow(profits_df1)]),
+    date_labels=("%b, %y"),date_breaks = "4 months",
+    expand = c(0,0)) +
+  scale_y_continuous(limits = c(min(profits_df1$values),max(profits_df1$values)), labels = scales::comma)
+
+cairo_pdf("./profitsAll.pdf",width=9,height=5)
+profits.plot.all
+gar <- dev.off()
+
+@
+
+\begin{table}[!ht]
+\centering
+\begin{threeparttable}
+\begin{tabular}{|p{52mm}|p{28mm}|p{28mm}|p{28mm}||l|}
+ \hline
+	Model  & $\gamma^{*1}$ & $\gamma^{*2}$ & $\gamma^{*3}$ & Točnost \rule{0pt}{3ex} \\
+  \hline
+  ARMA\tnote{$\star$} \newline \Sexpr{pq1.ARMA_bayes.w}, $\delta=\Sexpr{d1.ARMA_bayes}$ \newline $\gamma^{*1}=\Sexpr{gamma1.ARMA_bayes[1]}, \gamma^{*2}=\Sexpr{gamma1.ARMA_bayes[2]}, \gamma^{*3}=\Sexpr{gamma1.ARMA_bayes[3]}$ &
+   $pr=$ \Sexpr{format(round(tail(ARMA_bayes_profits,1)[1,1],0),big.mark = ",")} USD \newline 
+   $nt=$ \Sexpr{tradeCount_function2(ARMA_bayes_test)[as.character(gamma1.ARMA_bayes)][1]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(ARMA_bayes_test,gamma1.ARMA_bayes)[1], nsmall=4)}&
+   $pr=$ \Sexpr{format(round(tail(ARMA_bayes_profits,1)[1,2],0),big.mark = ",")} USD \newline 
+   $nt=$ \Sexpr{tradeCount_function2(ARMA_bayes_test)[as.character(gamma1.ARMA_bayes)][2]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(ARMA_bayes_test,gamma1.ARMA_bayes)[2], nsmall=4)} &
+   $pr=$ \Sexpr{format(round(tail(ARMA_bayes_profits,1)[1,3],0),big.mark = ",")} USD \newline 
+   $nt=$ \Sexpr{tradeCount_function2(ARMA_bayes_test)[as.character(gamma1.ARMA_bayes)][3]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(ARMA_bayes_test,gamma1.ARMA_bayes)[3], nsmall=4)} &
+   \Sexpr{accuracy_function2(ARMA_bayes_test)}
+   \rule{0pt}{3ex} \\
+  \hline
+  LR \newline $\delta=\Sexpr{d1.LR_bayes}, D=\Sexpr{dd1.LR_bayes}$ \newline $\gamma^{*1}=\Sexpr{gamma1.LR_bayes[1]}, \gamma^{*2}=\Sexpr{gamma1.LR_bayes[2]}, \gamma^{*3}=\Sexpr{gamma1.LR_bayes[3]}$ &
+   $pr=$ \Sexpr{format(round(tail(LR_bayes_profits,1)[1,1],0),big.mark = ",")} USD \newline 
+   $nt=$ \Sexpr{tradeCount_function2(LR_bayes_test)[as.character(gamma1.LR_bayes)][1]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(LR_bayes_test,gamma1.LR_bayes)[1], nsmall=4)} &
+   $pr=$ \Sexpr{format(round(tail(LR_bayes_profits,1)[1,2],0),big.mark = ",")} USD \newline
+   $nt=$ \Sexpr{tradeCount_function2(LR_bayes_test)[as.character(gamma1.LR_bayes)][2]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(LR_bayes_test,gamma1.LR_bayes)[2], nsmall=4)} &
+   $pr=$ \Sexpr{format(round(tail(LR_bayes_profits,1)[1,3],0),big.mark = ",")} USD \newline 
+   $nt=$ \Sexpr{tradeCount_function2(LR_bayes_test)[as.character(gamma1.LR_bayes)][3]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(LR_bayes_test,gamma1.LR_bayes)[3], nsmall=4)} &
+   \Sexpr{accuracy_function2(LR_bayes_test)}
+   \rule{0pt}{3ex} \\
+   \hline
+  RF \newline $\delta=\Sexpr{d1.RF_frekv}, D=\Sexpr{dd1.RF_frekv}$ \newline $\gamma^{*1}=\Sexpr{gamma1.RF_frekv[1]}, \gamma^{*2}=\Sexpr{gamma1.RF_frekv[2]}, \gamma^{*3}=\Sexpr{gamma1.RF_frekv[3]}$ &
+   $pr=$ \Sexpr{format(round(tail(RF_frekv_profits,1)[1,1],0),big.mark = ",")} USD \newline 
+   $nt=$ \Sexpr{tradeCount_function2(RF_frekv_test)[as.character(gamma1.RF_frekv)][1]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(RF_frekv_test,gamma1.RF_frekv)[1], nsmall=4)} &
+   $pr=$ \Sexpr{format(round(tail(RF_frekv_profits,1)[1,2],0),big.mark = ",")} USD \newline
+   $nt=$ \Sexpr{tradeCount_function2(RF_frekv_test)[as.character(gamma1.RF_frekv)][2]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(RF_frekv_test,gamma1.RF_frekv)[2], nsmall=4)} &
+   $pr=$ \Sexpr{format(round(tail(RF_frekv_profits,1)[1,3],0),big.mark = ",")} USD \newline 
+   $nt=$ \Sexpr{tradeCount_function2(RF_frekv_test)[as.character(gamma1.RF_frekv)][3]} \newline
+   $ac=$ \Sexpr{format(accuracy_function3(RF_frekv_test,gamma1.RF_frekv)[3], nsmall=4)} &
+   \Sexpr{accuracy_function2(RF_frekv_test)}
+   \rule{0pt}{3ex} \\
+  \hline
+\end{tabular}
+\begin{tablenotes}
+\item[$\star$] \small{Pri nekaterih mejah zaupanja $\gamma$ imamo identično trgovanje na učni množici tudi za MA(1) s parametrom $\delta=80$. Poleg tega so nekatere kombinacije z modeli AR(2), MA(2), ARMA(1,1), ARMA(1,2) in ARMA(2,1) identično trgovale. Ker je model MA(1) bolj enostaven in imamo pri $\delta=100$ za največji nabor zaupanja $\gamma$ najvišje dobičke, izberemo MA(1), $\delta=100$. 
+Za izbran model imamo na učni množici identično trgovanje za $\gamma \in \left\{0.5,\cdots, 0.95\right\}$. Izberemo vrednost \Sexpr{gamma1.ARMA_bayes[2]} za $\gamma^{*2}.$}\\
+\end{tablenotes}
+\end{threeparttable}
+\caption{Modeli s parametri, s katerimi smo imeli največji končni dobiček na učni množici, so v prvem stolpcu. Znotraj tabele so izidi na testni množici: končni kumulativni dobiček ($pr$), število trgovanj ($nt$) in napovedna točnost ($ac$) trgovanja (upoštevamo le primere, kjer smo trgovali). Zadnji stolpec predstavlja napovedno točnost, ki je neodvisna od parametra $\gamma$. Preštejemo v kolikšnem deležu se ujameta napoved in smer spremembe cene glede na ostale parametre.}
+\label{tab: izidi.test2}
+\end{table}
+
+Vsi modeli s konzervativnim parametrom $\gamma$ prinašajo višje dobičke kot z liberalnim parametrom $\gamma$. Zanimivo je, da ima model MA(1) največjo napovedno točnost, vendar kljub temu ne prinaša najvišjih dobičkov. Poleg tega sprememba zaupanja pri MA(1) ne spremeni tako drastično števila trgovanj kot sprememba zaupanja pri LR in RF. Razlog za to je lahko tudi, da smo zaupanje v napoved modela MA(1) ocenili drugače. 
+Za primerljivo število trgovanj ($\gamma^{*2}$ za vse tri modele) je ARMA prinašala skoraj dvakrat višji dobiček kot LR in več kot dvakrat višji dobiček kot RF.
+Z modeloma MA(1) in RF pri izbranih parametrih $\gamma$ v nobenem primeru nismo imeli izgube, pri LR pa smo jo, ko smo veliko trgovali. 
+ 
+Če primerjamo modele s konzervativnim parametrom $\gamma$, je LR prinašala najvišje kumulativne dobičke in je le petkrat trgovala. Sledi RF in šele nato MA(1).
+Zanimivo je, da je za tri izbrane parametre $\gamma$ pri modelu MA(1) napovedna točnost največja ob najmanjšem številu izvedenih trgovanj, pri LR in RF pa ob največjem številu izvedenih trgovanj (kjer imamo v primeru LR izgubo).
+
+Kumulativni dobički v času so visoki tudi zato, ker smo v trg vstopili, ko je cena valute Bitcoin rasla. Ko se kasneje cena zniža, se tudi naši kumulativni dobički znižajo, če se nismo odločili za prodajo.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=.65\textwidth]{profitsAll.pdf}
+\caption{Dobički glede na izbran model za tri možne vrednosti parametra $\gamma$. Trgovanje od \Sexpr{zacetni_dan} do \Sexpr{koncni_dan}. Dodana je cena valute Bitcoin v času. S polno črto so prikazani modeli, s katerimi imamo najvišje končne dobičke.}
+\label{fig: one_year.all} 
+\end{figure}
+
+% \subsection{Primerjava modelov narejenih na Bayesov in frekventistični način}
+
+<<>>=
+profits.plot.frekv <- ggplot(profits_df.bayes.frekv1[grepl("frekv",profits_df.bayes.frekv1$model) | grepl("time",profits_df.bayes.frekv1$model) | grepl("BTC",profits_df.bayes.frekv1$model),],aes(x=time,y=values,col=model,lty=model)) +
+  geom_line(show.legend = TRUE) +
+  scale_linetype_manual(values=c("solid","solid","solid",
+                                 "solid","solid","solid",
+                                 "dotted"))+
+  scale_color_manual(values=c(c1[c(7,5,3)],
+                              c2[c(7,5,3)],
+                              "black")) +
+  labs(x = "Čas (mesec, leto)", y = "Cena/Kumulativni dobiček (USD)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90), legend.position=c(.2,.7), legend.title = element_blank()) +
+  scale_x_date(
+    limits = c(profits_df1$time[1],profits_df1$time[nrow(profits_df1)]),
+    date_labels=("%b, %y"),date_breaks = "4 months",
+    expand = c(0,0)) +
+  scale_y_continuous(labels = scales::comma)
+
+cairo_pdf("./profitsFrekv.pdf",width=8,height=6)
+profits.plot.frekv
+gar <- dev.off()
+@
+
+
+<<>>=
+pars.1.ma1 <- c("mu","theta","sigma","predy")
+div_ma1 <- readRDS("./MA1_plots_delta80_d100/checkDiv.rds")
+pars.1.lr <- c("alpha","beta1","beta2","beta3")
+div_lr <- readRDS("./LR_plots_d50_D110/checkDiv.rds")
+
+div.table.ma1 <- (div_ma1$ratios[pars=pars.1.ma1]) %>% matrix()
+colnames(div.table.ma1) <- "MA(1)"
+rownames(div.table.ma1) <- pars.1.ma1
+###
+div.table.lr <- (div_lr$ratios[pars=pars.1.lr]) %>% matrix()
+colnames(div.table.lr) <- "LR"
+rownames(div.table.lr) <- pars.1.lr
+
+
+div.table.ma1 <- round(div.table.ma1,4)
+div.table.lr <- round(div.table.lr,4)
+# xtable(div.table.lr,digits=4)
+@
+
+\begin{table}[!ht]
+\centering
+\begin{tabular}{|r|r|}
+  \hline
+ parameter & MA(1): $\delta=100$ \\ 
+  \hline
+$\mu$ & 0.8582 \\ 
+  $\theta$ & 0.8462 \\ 
+  $\sigma$ & 0.8033 \\ 
+  % $\hat{y}$ & 0.8178 \\ 
+   \hline
+\end{tabular}
+\quad
+\begin{tabular}{|r|l|}
+  \hline
+ parameter & LR: $D=110, \delta=50$\\ 
+  \hline
+$\alpha$ & 0.4040 \\ 
+  $\beta_1$ & 0.3907 \\ 
+  $\beta_2$ & 0.3991 \\ 
+  $\beta_3$ & 0.5186 \\ 
+   \hline
+\end{tabular}
+\caption{Delež efektivnih vzorcev na \Sexpr{train.time0} učnih dneh za parametre predlaganih modelov ARMA in LR.}
+\label{tab: n.eff.opt}
+\end{table}
+
+Za modela ARMA: MA(1), $\delta=100$ in LR: $\delta=50, D=110$ nismo imeli očitnih težav z divergenco. Delež efektivnih vzorcev je za model MA(1) za vse parametre nad 0.8, za LR pa nad 0.39. Tudi pri preverjanju na prvih 10 učnih dneh s 7,000 iteracijami (4,000 za \texttt{warmup}) in štirimi verigami nismo imeli očitnih težav.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\subsection{Izboljšave in razširitve}
+
+Na celotno ocenjeno ceno valute Bitcoin lahko gledamo tudi kot na signal. Obstaja veliko metod za odkrivanje vstopov, prehodov in izgub signala, kjer uporabimo ali razvijemo različne filtre, ki v idealnem primeru prehajajo samo signal in zavračajo vse ostalo.
+Izgube in artefakti v signalih namreč otežijo modeliranje in poslabšajo napovedi modelov. V finančni industriji iskanju in analiziranju dogodkov, ki spreminjajo naravo trga, rečemo {\it analiza dogodkov}. Na primer dogodek, kot je sprejetje zakona o prepovedi trgovanja z valuto Bitcoin na Kitajskem. Take dogodke bi lahko označili in podatkov, ki jih imamo v okolici časa teh dogodkov, ne bi obravnavali ali pa bi jih obravnavali drugače. Zanimivo bi bilo tudi poskusiti napovedati zlome trga z valuto Bitcoin, mehurčke in podobno. Za analizo dogodkov, napovedovanje zlomov, mehurčkov in podobnih reči bi potrebovali drugačne podatke.
+
+Za boljše napovedi bi bilo smiselno uporabiti vsaj minutne podatke. Predvidevamo, da je algoritmični pristop primernejši za visokofrekvenčno trgovanje. Dodatno bi lahko še:
+\begin{itemize}
+\item{Preiskali gostejši prostor za parametre $\delta, D$ in $\gamma$.}
+\item{Izbrali večjo učno množico.}
+\item{Vsak dan poiskali optimalna koeficienta $p$ in $q$ za model ARMA, parameter $D$ za RF in LR, število dreves za RF ter parametra $\delta$ in $\gamma$ in jih uporabili za napoved naslednjega dne.}
+\item{Napovedovali ne le smer spremembe, ampak tudi za koliko se bo cena spremenila.}
+\end{itemize}
+Za to bi potrebovali zmogljivejšo strojno opremo.
+
+% \section{Zaključek}
+
+\newpage
+\nocite{*}
+\bibliographystyle{ieeetr}
+\bibliography{simple}
+
+\newpage
+
+\begin{appendices}
+\section{Modeli} \label{sec: appendixA}
+
+\subsection*{AR(1)}
+<<>>=
+model.stan.list[[1]]
+@
+
+\subsection*{AR(2)}
+<<>>=
+model.stan.list[[2]]
+@
+\newpage
+\subsection*{MA(1)}
+<<>>=
+model.stan.list[[3]]
+@
+\newpage
+\subsection*{MA(2)}
+<<>>=
+model.stan.list[[4]]
+@
+\newpage
+\subsection*{ARMA(1,1)}
+<<>>=
+model.stan.list[[5]]
+@
+\newpage
+\subsection*{ARMA(1,2)}
+<<>>=
+model.stan.list[[6]]
+@
+\newpage
+\subsection*{ARMA(2,1)}
+<<>>=
+model.stan.list[[7]]
+@
+\newpage
+\subsection*{Logistična regresija}
+<<>>=
+model.stan.list[[8]]
+@
+
+\subsection*{Linearna regresija}
+<<>>=
+model.stan.list[[9]]
+@
+\newpage
+\section{model ARMA: težave z divergenco} \label{sec: appendixB}
+Največ težav z divergenco smo imeli pri modelu ARMA(1,2), zato grafično predstavimo povzetek težav tega modela za en dan učne množice \Sexpr{train.time0} dni. Uporabimo 7,000 iteracij, od tega jih prvih 4,000 zavržemo in 4 verige. Primerjamo modele za dve vrednosti parametra $\delta$ (30, 100) in dve vrednosti parametra \texttt{adapt\_delta} (0.80, 0.99). Rdeče črte ali točke na grafih prikazujejo divergentne iteracije.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{Traceplot.\label{test1a:a}}{\includegraphics[width=0.45\textwidth]{./delta80_d30_ARMA12/mcmc_trace.pdf}}\hspace{0.5em}%
+\subcaptionbox{Avtokorelacije.\label{test1a:b}}{\includegraphics[width=0.45\textwidth]{./delta80_d30_ARMA12/mcmc_acf.pdf}}
+\caption{Prikaz mešanja in avtokorelacij za $\delta=30$, \texttt{adapt\_delta} = 0.80.}
+\label{fig:test1a}
+\end{figure}
+%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{Razsevni grafikoni.\label{test1b:a}}{\includegraphics[width=0.45\textwidth]{./delta80_d30_ARMA12/pairs.png}}\hspace{0.5em}%
+\subcaptionbox{Aposteriorne porazdelitve parametrov in napovedi.\label{test1b:b}}{\includegraphics[width=0.45\textwidth]{./delta80_d30_ARMA12/mcmc_posterior.pdf}}
+\caption{Razsevni grafikoni in aposteriorne porazdelitve parametrov za $\delta=30$, \texttt{adapt\_delta} = 0.80.}
+\label{fig:test1b}
+\end{figure}
+%%%%%%%%%
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=.5\textwidth]{./delta80_d30_ARMA12/mcmc_parcoord.pdf}
+\caption{Prikaz paralelnih koordinat za $\delta=30$, \texttt{adapt\_delta} = 0.80.}
+\label{fig:test1c}
+\end{figure}
+
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{Traceplot.\label{test2a:a}}{\includegraphics[width=0.45\textwidth]{./delta99_d30_ARMA12/mcmc_trace.pdf}}\hspace{0.5em}%
+\subcaptionbox{Avtokorelacije.\label{test2a:b}}{\includegraphics[width=0.45\textwidth]{./delta99_d30_ARMA12/mcmc_acf.pdf}}
+\caption{Prikaz mešanja in avtokorelacij za $\delta=30$, \texttt{adapt\_delta} = 0.99.}
+\label{fig:test2a}
+\end{figure}
+%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{Razsevni grafikoni.\label{test2b:a}}{\includegraphics[width=0.45\textwidth]{./delta99_d30_ARMA12/pairs.png}}\hspace{0.5em}%
+\subcaptionbox{Aposteriorne porazdelitve parametrov in napovedi.\label{test2b:b}}{\includegraphics[width=0.45\textwidth]{./delta99_d30_ARMA12/mcmc_posterior.pdf}}
+\caption{Razsevni grafikoni in aposteriorne porazdelitve parametrov za $\delta=30$, \texttt{adapt\_delta} = 0.99.}
+\label{fig:test2b}
+\end{figure}
+%%%%%%%%%
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=.5\textwidth]{./delta99_d30_ARMA12/mcmc_parcoord.pdf}
+\caption{Prikaz paralelnih koordinat za $\delta=30$, \texttt{adapt\_delta} = 0.99.}
+\label{fig:test2c}
+\end{figure}
+
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{Traceplot.\label{test3a:a}}{\includegraphics[width=0.45\textwidth]{./delta80_d100_ARMA12/mcmc_trace.pdf}}\hspace{0.5em}%
+\subcaptionbox{Avtokorelacije.\label{test3a:b}}{\includegraphics[width=0.45\textwidth]{./delta80_d100_ARMA12/mcmc_acf.pdf}}
+\caption{Prikaz mešanja in avtokorelacij za $\delta=100$, \texttt{adapt\_delta} = 0.80.}
+\label{fig:test3a}
+\end{figure}
+%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{Razsevni grafikoni.\label{test3b:a}}{\includegraphics[width=0.45\textwidth]{./delta80_d100_ARMA12/pairs.png}}\hspace{0.5em}%
+\subcaptionbox{Aposteriorne porazdelitve parametrov in napovedi.\label{test3b:b}}{\includegraphics[width=0.45\textwidth]{./delta80_d100_ARMA12/mcmc_posterior.pdf}}
+\caption{Razsevni grafikoni in aposteriorne porazdelitve parametrov za $\delta=100$, \texttt{adapt\_delta} = 0.80.}
+\label{fig:test3b}
+\end{figure}
+%%%%%%%%%
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=.5\textwidth]{./delta80_d100_ARMA12/mcmc_parcoord.pdf}
+\caption{Prikaz paralelnih koordinat za $\delta=100$, \texttt{adapt\_delta} = 0.80.}
+\label{fig:test3c}
+\end{figure}
+
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{Traceplot.\label{test4a:a}}{\includegraphics[width=0.45\textwidth]{./delta99_d100_ARMA12/mcmc_trace.pdf}}\hspace{0.5em}%
+\subcaptionbox{Avtokorelacije.\label{test4a:b}}{\includegraphics[width=0.45\textwidth]{./delta99_d100_ARMA12/mcmc_acf.pdf}}
+\caption{Prikaz mešanja in avtokorelacij za $\delta=100$, \texttt{adapt\_delta} = 0.99.}
+\label{fig:test4a}
+\end{figure}
+%%%%%%%%%
+\begin{figure}[!ht]
+\centering %out.width="\\linewidth" #, height=6, width=8>>=
+\subcaptionbox{Razsevni grafikoni.\label{test4b:a}}{\includegraphics[width=0.45\textwidth]{./delta99_d100_ARMA12/pairs.png}}\hspace{0.5em}%
+\subcaptionbox{Aposteriorne porazdelitve parametrov in napovedi.\label{test4b:b}}{\includegraphics[width=0.45\textwidth]{./delta99_d100_ARMA12/mcmc_posterior.pdf}}
+\caption{Razsevni grafikoni in aposteriorne porazdelitve parametrov za $\delta=100$, \texttt{adapt\_delta} = 0.99.}
+\label{fig:test4b}
+\end{figure}
+%%%%%%%%%
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=.5\textwidth]{./delta99_d100_ARMA12/mcmc_parcoord.pdf}
+\caption{Prikaz paralelnih koordinat za $\delta=100$, \texttt{adapt\_delta} = 0.99.}
+\label{fig:test4c}
+\end{figure}
+
+\newpage
+
+
+<<>>=
+pars.1.arma12 <- c("mu","phi","theta[1]","theta[2]","sigma","predy")
+div_delta80_d30 <- readRDS("./delta80_d30_ARMA12/checkDiv.rds")
+div_delta80_d100 <- readRDS("./delta80_d100_ARMA12/checkDiv.rds")
+div_delta99_d30 <- readRDS("./delta99_d30_ARMA12/checkDiv.rds")
+div_delta99_d100 <- readRDS("./delta99_d100_ARMA12/checkDiv.rds")
+
+div.table <- cbind((div_delta80_d30$ratios[pars=pars.1.arma12]) %>% matrix(),
+                   (div_delta99_d30$ratios[pars=pars.1.arma12]) %>% matrix(),
+                   (div_delta80_d100$ratios[pars=pars.1.arma12]) %>% matrix(),
+                   (div_delta99_d100$ratios[pars=pars.1.arma12]) %>% matrix())
+colnames(div.table) <- c("adapt_delta0.80.delta30",
+                         "adapt_delta0.99.delta30",
+                         "adapt_delta0.80.delta100",
+                         "adapt_delta0.99.delta100")
+rownames(div.table) <- pars.1.arma12
+div.table <- round(div.table,4)
+# xtable(div.table,digits=4)
+@
+
+<<>>=
+table_div_prop <- format(matrix(c(6.285,2.542,1.475,0.175),ncol=4),nsmall=3)
+# xtable(table_div_prop)
+@
+
+
+\begin{table}[!ht]
+\centering
+\small
+\begin{tabular}{|r|l|l|l|l|}
+  \hline
+  & \texttt{adapt\_delta} = 0.80, & \texttt{adapt\_delta} = 0.99, & \texttt{adapt\_delta} = 0.80, & \texttt{adapt\_delta} = 0.99, \\ 
+  & $\delta=30$ & $\delta=30$ & $\delta=100$ & $\delta=100$ \\ 
+  \hline
+$\alpha$ & 0.0318 & 0.0936 & 0.4382 & 0.4078 \\ 
+  $\phi$ & 0.1632 & 0.0746 & 0.1928 & 0.2238 \\ 
+  $\theta_1$ & 0.0876 & 0.0761 & 0.1865 & 0.2208 \\ 
+  $\theta_2$ & 0.2430 & 0.1611 & 0.2121 & 0.2292 \\ 
+  $\sigma$ & 0.4680 & 0.1581 & 0.4652 & 0.4890 \\ 
+  $\hat{y}$ & 0.9039 & 0.8891 & 1.0034 & 0.9882 \\ 
+\specialrule{.1em}{.05em}{.05em}
+\specialrule{.1em}{.05em}{.05em}
+  divergentne iteracije & 6.285\% & 2.542\% & 1.475\% & 0.175\%\\
+  \hline
+\end{tabular}
+\caption{Delež efektivnih vzorcev parametrov in napovedi modela ARMA(1,2) za izbrani vrednosti parametrov \texttt{adapt\_delta} (0.80, 0.99) in $\delta$ (30, 100) za en dan učne množice \Sexpr{train.time0} dni. Zadnja vrstica predstavlja delež divergentnih iteracij v odstotkih. Skupno število iteracij je 12,000.}
+\label{tab: n.eff}
+\end{table}
+
+% \begin{table}[ht]
+% \centering
+% \begin{tabular}{|r|r|r|}
+%   \hline
+%  & $\delta=30$ & $\delta=100$ \\ 
+%   \hline
+% \texttt{adapt\_delta} = 0.80 & 6.285\% & 1.475\% \\ 
+% \texttt{adapt\_delta} = 0.99 & 2.542\% & 0.175\% \\ 
+%    \hline
+% \end{tabular}
+% \end{table}
+
+S slik \ref{test1a:a} in \ref{test1b:a} je razvidno, da pri $\delta=30$, \texttt{adapt\_delta}=0.80 divergentne iteracije niso zgoščene le pri določenih vrednostih kakšnega parametra ali v določeni iteraciji. Z večanjem parametrov $\delta$ in \texttt{adapt\_delta} je delež divergentnih iteracij manjši, še vedno ne opazimo, da bi bile očitne zgostitve (slike \ref{test2a:a}, \ref{test2b:a}, \ref{test3a:a}, \ref{test3b:a}, \ref{test4a:a}, \ref{test4b:a}, tabela \ref{tab: n.eff}). S slike \ref{test2a:a} opazimo le, da je pri $\delta=30$, \texttt{adapt\_delta}=0.99 več divergentni iteracij proti koncu, predvsem pri četrti verigi.
+
+Avtokorelacije na \ref{test1a:b} so pri tretji verigi tudi pri \textit{zamiku} \texttt{Lag}=20 še visoke (predvsem za $\alpha$ in $\theta_1$). Zato imamo tudi majhen delež efektivnih vzorcev za ta parametra (tabela \ref{tab: n.eff}). Avtokorelacije hitreje padajo (in deleži efektivnih vzorcev hitreje naraščajo) z večanjem parametra $\delta$ (slike \ref{test2a:b}, \ref{test3a:b}, \ref{test4a:b}).
+
+Aposteriorne porazdelitve so na sliki \ref{test1b:b} predvsem za parametra $\alpha$, in $\theta_1$ zelo ukrivljene, pa tudi za $\theta_2$ in $\phi$. Ukrivljenost prav tako pada z večanjem parametra $\delta$ (slike \ref{test2b:b}, \ref{test3b:b}, \ref{test4b:b}).
+
+S slike \ref{fig:test1c} menimo, da je večji delež divergentnih iteracij pri manjših vrednostih parametra $\sigma$, kar je prisotno pri vseh kombinacijah $\delta$ in \texttt{adapt\_delta} (slike \ref{fig:test2c}, \ref{fig:test3c}, \ref{fig:test4c}). Vendar je aposteriorna porazdelitev $\sigma$ asimetrična v desno, zato je pričakovano, da je divergentnih iteracij več na tem območju.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{appendices}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\end{document}
