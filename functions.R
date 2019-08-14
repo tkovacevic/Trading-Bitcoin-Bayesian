@@ -109,7 +109,7 @@ func_TrVaTe <- function(modelTrValTe, #train, validation or test
                             x1 = c(0,1)[train.set[,"LastZ"]],
                             x2 = train.set[,"DistZ"],
                             x3 = train.set[,"TrendZ"],
-                            y = c(0,1)[train.set[,"RespZ"]],
+                            z = c(0,1)[train.set[,"RespZ"]],
                             N_test = nrow(test.set),
                             x1_test = c(0,1)[test.set[,"LastZ"]],
                             x2_test = test.set[,"DistZ"],
@@ -121,12 +121,12 @@ func_TrVaTe <- function(modelTrValTe, #train, validation or test
                             seed = seed,
                             verbose = FALSE,
                             refresh = -1,
-                            control = list(max_treedepth = 30,adapt_delta = delta))
+                            control = list(adapt_delta = delta))
           y_fit
           
         })
         predicted <- sapply(predicted0,function(x){ #vector of probabilities for increase in price
-          summary(x,pars=c("y_test"))$summary[,"mean"]
+          summary(x,pars=c("z_test"))$summary[,"mean"]
         })
         list.1[[paste("TrainDays=",train.time0,"_dd=",dd.i,"_d=",d.i,sep="")]] <- predicted0
         
@@ -187,13 +187,6 @@ func_TrVaTe <- function(modelTrValTe, #train, validation or test
       M.0 <- M.0[,-ncol(M.0),drop=FALSE] #zadnjo želimo napovedati
       
       if(model == "ARMA_bayes"){
-        if(pq.i %in% c("MA_1","MA_2")){
-          parss <- c("mu","theta","sigma","predy")
-        }else if(pq.i %in% c("AR_1","AR_2")){
-          parss <- c("alpha","beta","sigma","predy")
-        }else{
-          parss <- c("alpha","phi","theta","sigma","predy")
-        }
         model.stan <- model.stan.list[[pq.i]]
         predicted0 <- apply(M.0, 1, function(x) { #stan output
           stan_data <- list(y = x, T=length(x))
@@ -204,7 +197,6 @@ func_TrVaTe <- function(modelTrValTe, #train, validation or test
                             seed = seed,
                             verbose = FALSE,
                             refresh = -1,
-                            # pars=parss,
                             control = list(max_treedepth = 30,adapt_delta = delta))
           y_fit
           
