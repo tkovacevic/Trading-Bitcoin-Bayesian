@@ -1,6 +1,6 @@
 # setwd("~/Dropbox/Tjasulka/MAGISTERIJ/Bayes_2018/Trading_Bitcoin")
 
-#comment: price between two seq days is always different (we always have increas/decrease in price)
+#comment: price between two seq days is always different (we always have increase/decrease in price)
 
 funk_when_trade <- function(m){
   M2 <- apply(m,2,function(x){
